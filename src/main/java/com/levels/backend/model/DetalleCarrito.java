@@ -1,8 +1,16 @@
 package com.levels.backend.model;
 
+import org.hibernate.annotations.OnDelete;
+import org.hibernate.annotations.OnDeleteAction;       // <--- IMPORTAR
+
 import com.fasterxml.jackson.annotation.JsonIgnore;
 
-import jakarta.persistence.*;
+import jakarta.persistence.Entity; // <--- IMPORTAR
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 
 @Entity
 public class DetalleCarrito {
@@ -12,19 +20,24 @@ public class DetalleCarrito {
 
     @ManyToOne
     @JoinColumn(name = "carrito_id")
-    @JsonIgnore //Cuando muestra el detalle, no volvera a mostrar el carrito completo dentro de él, evitar el bucle infinito de json
+    @JsonIgnore     // Evitar referencia circular en JSON
     private Carrito carrito;
 
     @ManyToOne
     @JoinColumn(name = "producto_id")
+    // AGREGAR ESTA LÍNEA MÁGICA:
+    @OnDelete(action = OnDeleteAction.CASCADE) 
     private Producto producto;
 
     private Integer cantidad;
     private Double precioUnitario;
-    
-    public Double getSubtotal() { return precioUnitario * cantidad; }
 
-    // Getters y Setters
+    public Double getSubtotal() {
+        return precioUnitario * cantidad;
+    }
+
+    // Getters y Setters...
+    // (El resto de tu código sigue igual)
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
     public Carrito getCarrito() { return carrito; }
