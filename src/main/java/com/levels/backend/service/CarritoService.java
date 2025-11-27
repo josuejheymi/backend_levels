@@ -1,11 +1,18 @@
 package com.levels.backend.service;
 
-import com.levels.backend.model.*;
-import com.levels.backend.repository.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-import java.util.Optional;
+import com.levels.backend.model.Carrito;
+import com.levels.backend.model.DetalleCarrito;
+import com.levels.backend.model.Producto;
+import com.levels.backend.model.Usuario;
+import com.levels.backend.repository.CarritoRepository;
+import com.levels.backend.repository.DetalleCarritoRepository;
+import com.levels.backend.repository.ProductoRepository;
+import com.levels.backend.repository.UsuarioRepository; 
+
+import jakarta.transaction.Transactional;
 
 @Service
 public class CarritoService {
@@ -87,5 +94,52 @@ public class CarritoService {
         }
 
         carrito.setTotal(suma);
+    }
+    // 1. ELIMINAR UN PRODUCTO DEL CARRITO (VERSIÓN ROBUSTA)
+    @Transactional // Importante: Asegura que el borrado se ejecute realmente
+    public Carrito eliminarProducto(Long usuarioId, Long productoId) {
+        Carrito carrito = carritoRepository.findByUsuarioId(usuarioId);
+        if (carrito == null) throw new RuntimeException("Carrito no encontrado");
+
+        // BORRADO DIRECTO EN BASE DE DATOS
+        // Esto elimina el producto (y sus duplicados si los hubiera por error)
+        detalleRepository.deleteByCarritoIdAndProductoId(carrito.getId(), productoId);
+        
+        // Limpiamos la lista en memoria para recalcular el total correctamente
+        carrito.getItems().removeIf(item -> item.getProducto().getId().equals(productoId));
+        
+        // Recalculamos el total con lo que queda
+        calcularTotalCarrito(carrito);
+        
+        return carritoRepository.save(carrito);
+    }
+
+    // 2. ACTUALIZAR CANTIDAD (+ o -)
+    public Carrito actualizarCantidad(Long usuarioId, Long productoId, Integer nuevaCantidad) {
+        Carrito carrito = carritoRepository.findByUsuarioId(usuarioId);
+        if (carrito == null) throw new RuntimeException("Carrito no encontrado");
+
+        // Buscamos el item específico
+        DetalleCarrito detalle = carrito.getItems().stream()
+                .filter(item -> item.getProducto().getId().equals(productoId))
+                .findFirst()
+                .orElseThrow(() -> new RuntimeException("Producto no encontrado en el carrito"));
+
+        // Validaciones
+        if (nuevaCantidad <= 0) {
+            // Si baja a 0, lo eliminamos
+            return eliminarProducto(usuarioId, productoId);
+        }
+        
+        if (nuevaCantidad > detalle.getProducto().getStock()) {
+            throw new RuntimeException("Stock insuficiente. Máximo disponible: " + detalle.getProducto().getStock());
+        }
+
+        // Actualizamos
+        detalle.setCantidad(nuevaCantidad);
+        
+        // Recalculamos y guardamos
+        calcularTotalCarrito(carrito);
+        return carritoRepository.save(carrito);
     }
 }
