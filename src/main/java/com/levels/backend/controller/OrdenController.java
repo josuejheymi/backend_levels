@@ -24,6 +24,9 @@ public class OrdenController {
     @Autowired
     private OrdenService ordenService;
 
+    @Autowired // Inyectamos el repositorio directo para este reporte rápido
+    private com.levels.backend.repository.OrdenRepository ordenRepository;
+
     // POST: Finalizar compra (Checkout)
     // Body: { "usuarioId": 1 }
     @PostMapping("/checkout")
@@ -41,5 +44,16 @@ public class OrdenController {
     @GetMapping("/usuario/{id}")
     public List<Orden> historial(@PathVariable Long id) {
         return ordenService.obtenerOrdenesUsuario(id);
+    }
+    @GetMapping("/stats")
+    public ResponseEntity<?> obtenerEstadisticas() {
+        Double totalVentas = ordenRepository.sumarVentasTotales();
+        long cantidadOrdenes = ordenRepository.count(); // Cuenta cuántas filas hay
+
+        // Devolvemos un JSON bonito
+        return ResponseEntity.ok(Map.of(
+            "totalVentas", totalVentas != null ? totalVentas : 0.0,
+            "cantidadOrdenes", cantidadOrdenes
+        ));
     }
 }
