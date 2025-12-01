@@ -5,6 +5,7 @@ import com.levels.backend.service.UsuarioService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import com.levels.backend.security.JwtService;
 
 import java.time.LocalDate;
 import java.util.Map;
@@ -16,6 +17,8 @@ public class UsuarioController {
 
     @Autowired
     private UsuarioService usuarioService;
+    @Autowired
+    private JwtService jwtService; // <---  servicio de JWT
 
     // --- ENDPOINT DE REGISTRO ---
     // URL: POST x
@@ -55,9 +58,28 @@ public class UsuarioController {
         try {
             String email = credenciales.get("email");
             String password = credenciales.get("password");
+            
+            // 1. Validamos credenciales (Lanza error si falla)
+            Usuario usuario = usuarioService.login(email, password);
+            
+            // 2. Generamos el Token JWT
+            String token = jwtService.generateToken(usuario.getEmail());
 
-            Usuario usuarioLogueado = usuarioService.login(email, password);
-            return ResponseEntity.ok(usuarioLogueado);
+            // 3. Devolvemos TODO: Datos del usuario + Token
+            // Creamos una respuesta personalizada (Map)
+            Map<String, Object> respuesta = Map.of(
+                "token", token,          // <--- ¡AQUÍ VA EL TOKEN!
+                "id", usuario.getId(),
+                "nombre", usuario.getNombre(),
+                "email", usuario.getEmail(),
+                "rol", usuario.getRol(),
+                "esEstudianteDuoc", usuario.isEsEstudianteDuoc(),
+                "puntosLevelUp", usuario.getPuntosLevelUp(),
+                "nivel", usuario.getNivel(),
+                "fechaNacimiento", usuario.getFechaNacimiento()
+            );
+
+            return ResponseEntity.ok(respuesta);
 
         } catch (RuntimeException e) {
             return ResponseEntity.status(401).body(Map.of("error", "Credenciales incorrectas"));
