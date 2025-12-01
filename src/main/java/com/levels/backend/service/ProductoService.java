@@ -64,4 +64,16 @@ public class ProductoService {
         }
         return false;
     }
+    // 5. Actualizar producto existente
+    public Producto actualizarProducto(Long id, Producto nuevosDatos) {
+        return productoRepository.findById(id).map(prod -> {
+            prod.setNombre(nuevosDatos.getNombre());
+            prod.setDescripcion(nuevosDatos.getDescripcion());
+            prod.setPrecio(nuevosDatos.getPrecio());
+            prod.setStock(nuevosDatos.getStock()); // <--- AQUÍ ACTUALIZAS EL STOCK
+            prod.setCategoria(nuevosDatos.getCategoria());
+            prod.setImagenUrl(nuevosDatos.getImagenUrl());
+            return productoRepository.save(prod);
+        }).orElseThrow(() -> new RuntimeException("Producto no encontrado"));
+    }
 }
