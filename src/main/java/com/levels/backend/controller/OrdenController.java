@@ -5,6 +5,7 @@ import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -29,11 +30,16 @@ public class OrdenController {
 
     // POST: Finalizar compra (Checkout)
     // Body: { "usuarioId": 1 }
+    // POST: Finalizar compra (Checkout)
+    // Body esperado: { "usuarioId": 1, "direccion": "Calle Falsa 123" }
     @PostMapping("/checkout")
-    public ResponseEntity<?> checkout(@RequestBody Map<String, Long> payload) {
+    public ResponseEntity<?> checkout(@RequestBody Map<String, Object> payload) {
         try {
-            Long usuarioId = payload.get("usuarioId");
-            Orden orden = ordenService.generarOrden(usuarioId);
+            // Convertimos los datos del JSON
+            Long usuarioId = ((Number) payload.get("usuarioId")).longValue();
+            String direccion = (String) payload.get("direccion"); // <--- Nuevo
+
+            Orden orden = ordenService.generarOrden(usuarioId, direccion);
             return ResponseEntity.ok(orden);
         } catch (Exception e) {
             return ResponseEntity.badRequest().body("Error en la compra: " + e.getMessage());
@@ -55,5 +61,12 @@ public class OrdenController {
             "totalVentas", totalVentas != null ? totalVentas : 0.0,
             "cantidadOrdenes", cantidadOrdenes
         ));
+    }
+    // ...
+    // GET: Ver todas las órdenes (Solo Admin)
+    @GetMapping
+    @PreAuthorize("hasRole('ADMIN')") // O confía en el SecurityConfig
+    public List<Orden> listarTodas() {
+        return ordenService.listarTodas();
     }
 }
