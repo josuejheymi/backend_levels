@@ -1,6 +1,9 @@
 package com.levels.backend.model;
 
-import jakarta.persistence.*;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
 
 @Entity
 public class Producto {
@@ -14,6 +17,7 @@ public class Producto {
     private Integer stock;
     private String imagenUrl;
     private String categoria; 
+    private String videoUrl;
 
     public Producto() {}
     
@@ -32,4 +36,6 @@ public class Producto {
     public void setImagenUrl(String imagenUrl) { this.imagenUrl = imagenUrl; }
     public String getCategoria() { return categoria; }
     public void setCategoria(String categoria) { this.categoria = categoria; }
+    public String getVideoUrl() { return videoUrl; }
+    public void setVideoUrl(String videoUrl) { this.videoUrl = videoUrl; }
 }
