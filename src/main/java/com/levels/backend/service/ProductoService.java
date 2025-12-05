@@ -73,6 +73,7 @@ public class ProductoService {
             prod.setStock(nuevosDatos.getStock()); // <--- AQUÍ ACTUALIZAS EL STOCK
             prod.setCategoria(nuevosDatos.getCategoria());
             prod.setImagenUrl(nuevosDatos.getImagenUrl());
+            prod.setVideoUrl(nuevosDatos.getVideoUrl());
             return productoRepository.save(prod);
         }).orElseThrow(() -> new RuntimeException("Producto no encontrado"));
     }
