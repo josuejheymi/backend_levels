@@ -4,6 +4,8 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 
 @Entity
 public class Producto {
@@ -15,10 +17,11 @@ public class Producto {
     private String descripcion;
     private Double precio;
     private Integer stock;
-    private String imagenUrl;
-    private String categoria; 
+    private String imagenUrl; 
     private String videoUrl;
-
+    @ManyToOne 
+    @JoinColumn(name = "categoria_id") // Nombre de la columna FK en la tabla 'producto'
+    private Categoria categoria;
     public Producto() {}
     
     // Getters y Setters
@@ -34,8 +37,8 @@ public class Producto {
     public void setStock(Integer stock) { this.stock = stock; }
     public String getImagenUrl() { return imagenUrl; }
     public void setImagenUrl(String imagenUrl) { this.imagenUrl = imagenUrl; }
-    public String getCategoria() { return categoria; }
-    public void setCategoria(String categoria) { this.categoria = categoria; }
+    public Categoria getCategoria() { return categoria; }
+    public void setCategoria(Categoria categoria) { this.categoria = categoria; }
     public String getVideoUrl() { return videoUrl; }
     public void setVideoUrl(String videoUrl) { this.videoUrl = videoUrl; }
 }
