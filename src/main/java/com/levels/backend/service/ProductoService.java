@@ -6,80 +6,82 @@ import java.util.Optional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-import com.levels.backend.model.Producto; // Para las nuevas Categorías
-import com.levels.backend.repository.CategoriaRepository; // Importamos el modelo Categoria
-import com.levels.backend.repository.DetalleCarritoRepository; // Importante para el borrado seguro
+import com.levels.backend.model.Producto;
+import com.levels.backend.repository.CategoriaRepository; // Importamos todos los repositorios
+import com.levels.backend.repository.DetalleCarritoRepository;
 import com.levels.backend.repository.ProductoRepository;
 import com.levels.backend.repository.ResenaRepository;
 
 import jakarta.transaction.Transactional;
 
+/**
+ * SERVICIO: PRODUCTOS (Gestión de Inventario y Catálogo)
+ * ----------------------------------------------------
+ * Contiene la lógica para listar, crear, y, críticamente, eliminar productos
+ * de forma segura, respetando todas las llaves foráneas.
+ */
 @Service
 public class ProductoService {
 
-    @Autowired
-    private ProductoRepository productoRepository;
-
-    @Autowired
-    private DetalleCarritoRepository detalleRepository; // Para limpieza del carrito
-    
-    @Autowired
-    private ResenaRepository resenaRepository; // Para limpieza de reseñas
-    
-    @Autowired 
-    private CategoriaRepository categoriaRepository; // Para buscar la entidad Categoria
+    @Autowired private ProductoRepository productoRepository;
+    @Autowired private DetalleCarritoRepository detalleRepository; // Para limpiar carritos
+    @Autowired private ResenaRepository resenaRepository;         // Para limpiar reseñas
+    @Autowired private CategoriaRepository categoriaRepository;    // Para buscar categorías (aunque lo haga el Controller, aquí está disponible)
 
     /**
-     * 1. Obtener productos (con o sin filtro de categoría)
-     * Usa el nombre de la Categoría para filtrar, gracias a la relación JPA.
+     * 1. OBTENER PRODUCTOS (con o sin filtro)
+     * @param nombreCategoria Nombre de la categoría a filtrar (opcional).
+     * @return Lista de productos.
      */
     public List<Producto> listarProductos(String nombreCategoria) { 
         if (nombreCategoria != null && !nombreCategoria.isEmpty()) {
-            // findByCategoria_Nombre: Busca por el campo 'nombre' dentro de la entidad 'Categoria'
+            // Filtrado: Busca por el nombre dentro de la entidad Categoria
             return productoRepository.findByCategoria_Nombre(nombreCategoria); 
         }
+        // Sin filtro, devuelve todo
         return productoRepository.findAll();
     }
 
     /**
-     * 2. Obtener un producto por ID
+     * 2. OBTENER UN PRODUCTO POR ID
+     * Uso: Para la página de detalle (ProductDetail.jsx).
      */
     public Optional<Producto> obtenerPorId(Long id) {
         return productoRepository.findById(id);
     }
 
     /**
-     * 3. Guardar/Crear producto
-     * Se encarga de buscar la entidad Categoria para el ManyToOne.
+     * 3. GUARDAR/CREAR PRODUCTO
+     * @param producto Producto con la Categoria ya resuelta.
      */
     public Producto guardarProducto(Producto producto) {
-        // LÓGICA DE NEGOCIO: Evitar precios negativos
+        // LÓGICA DE NEGOCIO: Evitar datos inconsistentes
         if (producto.getPrecio() < 0) {
             throw new RuntimeException("El precio no puede ser negativo");
         }
-        
-        // ASUNCIÓN CLAVE: La data que viene del frontend ya tiene el objeto Categoria adjunto,
-        // o esta lógica sería manejada en el Controller si solo recibiera el ID de Categoría.
-        // Si el Controller no lo hace, esta parte fallaría al no tener la FK. 
-        // Asumiremos que el Controller ya adjuntó la Categoria.
-
         return productoRepository.save(producto);
     }
 
     /**
-     * 4. Eliminar producto (MODIFICADO: Limpieza en Cascada Manual)
-     * Crítico para evitar errores de clave foránea (FK) en MySQL.
+     * 4. ELIMINAR PRODUCTO (Limpieza en Cascada Manual)
+     * ----------------------------------------------------
+     * Es una operación @Transactional para garantizar que si la BD falla en
+     * el paso C, los pasos A y B se reviertan.
      */
     @Transactional 
     public boolean eliminarProducto(Long id) {
         if (productoRepository.existsById(id)) {
-            // PASO A: Borrar este producto de todos los carritos (evita FK en DetalleCarrito)
+            
+            // PASO A: Limpieza del Carrito (Si está en el carrito, no puede eliminarse).
+            // Usamos una consulta DELETE masiva que elimina todas las referencias al producto.
             detalleRepository.deleteByProductoId(id);
             
-            // PASO B: Borrar todas las reseñas asociadas (evita FK en Resena)
+            // PASO B: Limpieza de Reseñas (Si tiene reviews, no puede eliminarse)
+            // Usamos una consulta DELETE masiva que elimina todas las reseñas asociadas.
             resenaRepository.deleteByProductoId(id);
 
-            // PASO C: Ahora sí, borrar el producto principal 
+            // PASO C: Eliminar el Producto principal
+            // Esto solo es seguro si los pasos A y B eliminaron todas las FK que apuntaban a él.
             productoRepository.deleteById(id);
             
             return true;
@@ -88,25 +90,25 @@ public class ProductoService {
     }
     
     /**
-     * 5. Actualizar producto existente (Incluye Stock y VideoUrl)
+     * 5. ACTUALIZAR PRODUCTO EXISTENTE (Recomendado para el Admin Panel)
+     * Patrón: Busca el original -> Aplica cambios -> Guarda la versión modificada.
      */
     public Producto actualizarProducto(Long id, Producto nuevosDatos) {
+        // Busca el producto original. Si no existe, lanza excepción.
         return productoRepository.findById(id).map(prod -> {
             
-            // Actualización de campos normales
+            // Mapeo defensivo: Solo actualizamos los campos que el Frontend puede enviar
             prod.setNombre(nuevosDatos.getNombre());
             prod.setDescripcion(nuevosDatos.getDescripcion());
             prod.setPrecio(nuevosDatos.getPrecio());
-            
-            // Actualización de Stock (Lógica de Negocio)
             prod.setStock(nuevosDatos.getStock()); 
             
-            // Actualización de Campos Nuevos
-            prod.setCategoria(nuevosDatos.getCategoria()); // Mantenemos la nueva entidad Categoria
+            // Las relaciones se actualizan si vienen con el objeto adjunto
+            prod.setCategoria(nuevosDatos.getCategoria()); 
             prod.setImagenUrl(nuevosDatos.getImagenUrl());
-            prod.setVideoUrl(nuevosDatos.getVideoUrl()); // El nuevo link de YouTube
+            prod.setVideoUrl(nuevosDatos.getVideoUrl());
 
-            return productoRepository.save(prod);
+            return productoRepository.save(prod); // Guarda la entidad actualizada
         }).orElseThrow(() -> new RuntimeException("Producto no encontrado"));
     }
 }

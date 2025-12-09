@@ -25,112 +25,108 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import com.levels.backend.security.JwtAuthFilter;
 
 /**
- * CLASE PRINCIPAL DE SEGURIDAD (El "Portero" del Edificio)
- * Esta clase define las reglas de quién puede entrar y a dónde en nuestra aplicación.
- * Configura el manejo de Tokens JWT, los permisos por rol y la conexión con el Frontend.
+ * CONFIGURACIÓN DE SEGURIDAD (Spring Security 6)
+ * ----------------------------------------------------
+ * Esta clase actúa como el "Portero" de la aplicación.
+ * Define reglas de acceso, cors, filtros JWT y roles.
  */
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
 
-    // Inyectamos nuestro filtro personalizado que sabe leer el Token del header.
+    // Filtro personalizado que intercepta cada petición para buscar el Token JWT
     @Autowired
     private JwtAuthFilter jwtAuthFilter;
     
-    // Inyectamos el servicio que sabe buscar usuarios en nuestra Base de Datos MySQL.
+    // Servicio para buscar usuarios en la base de datos MySQL
     @Autowired
     private UserDetailsService userDetailsService;
 
     /**
-     * CONFIGURACIÓN DE LA CADENA DE SEGURIDAD
-     * Aquí definimos las reglas de tráfico HTTP.
+     * CADENA DE FILTROS DE SEGURIDAD (Security Filter Chain)
+     * Aquí se definen las reglas de tráfico HTTP.
      */
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-            // 1. CORS (Cross-Origin Resource Sharing):
-            // Permite que nuestra página Web (React en puerto 3000) hable con este Backend (en puerto 8080).
-            // Sin esto, el navegador bloquearía la conexión.
+            // 1. CORS: Permitir peticiones desde el Frontend (React localhost:3000)
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             
-            // 2. CSRF (Cross-Site Request Forgery):
-            // Lo desactivamos porque usamos Tokens (JWT) y no sesiones de navegador tradicionales.
-            // Es necesario para que funcionen los métodos POST, PUT y DELETE desde Postman o React.
+            // 2. CSRF: Deshabilitado porque usamos Tokens (Stateless), no cookies de sesión
             .csrf(csrf -> csrf.disable())
             
-            // 3. REGLAS DE AUTORIZACIÓN (El semáforo de acceso):
+            // 3. REGLAS DE AUTORIZACIÓN (El semáforo)
             .authorizeHttpRequests(auth -> auth
             
-                // --- RUTAS PÚBLICAS (Acceso libre para todos) ---
-                // Conecta con: Pantalla de Login y Pantalla de Registro.
+                // --- A. RUTAS PÚBLICAS (Acceso libre) ---
                 .requestMatchers("/api/usuarios/login", "/api/usuarios/registro").permitAll()
                 
-                // Conecta con: Home (Ver catálogo), Blog (Leer noticias) y Detalle de Producto.
-                // Permitimos solo GET (ver), nadie puede borrar o crear aquí sin permiso.
+                // Catálogo (Ver productos, categorías, blog y reseñas es gratis)
                 .requestMatchers(HttpMethod.GET, "/api/productos/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/categorias/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/blog/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/resenas/**").permitAll()
                 
-                // Documentación de la API (Swagger)
+                // Documentación Swagger/OpenAPI
                 .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
 
-                // --- RUTAS PROTEGIDAS POR ROL (Solo personal autorizado) ---
+                // --- B. RUTAS DE CLIENTE (Requieren Login) ---
                 
-                // 1. VENTAS Y ESTADÍSTICAS
-                // Conecta con: Panel de Admin -> Pestaña "Ventas" y "Resumen".
-                // Permite que tanto el Jefe (ADMIN) como los empleados (VENDEDOR) vean el historial.
+                // Ver detalle de UNA orden (Mi comprobante)
+                // Permitimos 'authenticated()' para que cualquier usuario vea SU propia orden.
+                // (Nota: Idealmente el controlador debe verificar que la orden pertenezca al usuario).
+                .requestMatchers(HttpMethod.GET, "/api/ordenes/{id}").authenticated()
+                
+                // Ver historial de compras (Perfil)
+                .requestMatchers(HttpMethod.GET, "/api/ordenes/usuario/**").authenticated()
+
+                // --- C. RUTAS DE STAFF (Admin / Vendedor) ---
+                
+                // Ver TODAS las ventas del sistema (Dashboard)
                 .requestMatchers(HttpMethod.GET, "/api/ordenes").hasAnyRole("ADMIN", "VENDEDOR") 
                 .requestMatchers(HttpMethod.GET, "/api/ordenes/stats").hasAnyRole("ADMIN", "VENDEDOR")
 
-                // 2. GESTIÓN DE INVENTARIO (Crear/Borrar Productos)
-                // Conecta con: Panel de Admin -> Botón "Nuevo Producto" y "Eliminar".
-                // REGLA DE NEGOCIO: El vendedor solo mira, el ADMIN toca.
+                // Gestión de Inventario (Solo el Jefe puede borrar/crear)
                 .requestMatchers(HttpMethod.POST, "/api/productos/**").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.PUT, "/api/productos/**").hasRole("ADMIN") // Agregado PUT
                 .requestMatchers(HttpMethod.DELETE, "/api/productos/**").hasRole("ADMIN")
                 
-                // 3. GESTIÓN DEL BLOG
-                // Conecta con: Panel de Admin -> Pestaña "Noticias".
+                // Gestión del Blog
                 .requestMatchers("/api/blog/**").hasRole("ADMIN")
 
-                // --- RESTO DEL SISTEMA ---
-                // Conecta con: Carrito de Compras, Perfil de Usuario, Checkout.
-                // Cualquier otra ruta no listada arriba requiere que el usuario tenga un Token válido.
+                // --- D. TODO LO DEMÁS ---
+                // Cualquier otra ruta no listada arriba requiere al menos estar logueado.
                 .anyRequest().authenticated()
             )
             
-            // 4. GESTIÓN DE SESIÓN:
-            // STATELESS significa que el servidor NO guarda memoria de quién está logueado.
-            // Cada petición debe traer su propio Token (como mostrar el DNI cada vez que entras).
+            // 4. SESIÓN: Stateless (Sin estado)
+            // No guardamos sesión en el servidor. Cada petición debe traer su Token.
             .sessionManagement(sess -> sess.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             
-            // 5. PROVEEDOR DE AUTENTICACIÓN:
-            // Le dice a Spring cómo verificar la contraseña con la base de datos.
+            // 5. PROVEEDOR: Conectamos nuestro UserDetailsService y PasswordEncoder
             .authenticationProvider(authenticationProvider())
             
-            // 6. FILTRO JWT:
-            // Ejecuta nuestro filtro (JwtAuthFilter) ANTES del filtro estándar de usuario/contraseña.
-            // Esto permite entrar con el Token sin tener que mandar la contraseña de nuevo.
+            // 6. FILTRO: Ejecutar nuestro filtro JWT antes del filtro estándar de usuario/password
             .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
 
     /**
-     * CONFIGURACIÓN CORS (El Puente con el Frontend)
-     * Define quién tiene permiso para llamar a este servidor.
+     * CONFIGURACIÓN CORS
+     * Permite que React (puerto 3000) hable con Spring Boot (puerto 8080).
      */
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
         
-        // IMPORTANTE: Aquí defines la URL de tu Frontend.
-        // Si subes esto a internet, cambia "localhost:3000" por tu dominio real.
+        // Origen permitido (Tu Frontend)
         configuration.setAllowedOrigins(Arrays.asList("http://localhost:3000")); 
         
-        // Qué acciones permitimos hacer al Frontend
+        // Métodos HTTP permitidos
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         
-        // Permitimos enviar el Token en la cabecera (Authorization)
+        // Cabeceras permitidas (Authorization es vital para enviar el Token)
         configuration.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type"));
         
         configuration.setAllowCredentials(true);
@@ -142,25 +138,20 @@ public class SecurityConfig {
 
     /**
      * PROVEEDOR DE AUTENTICACIÓN
-     * Es el cerebro que conecta Spring Security con tu base de datos MySQL.
+     * Une el servicio de usuarios con el encriptador de contraseñas.
      */
     @Bean
     public AuthenticationProvider authenticationProvider() {
         DaoAuthenticationProvider authProvider = new DaoAuthenticationProvider();
-        
-        // Le decimos: "Usa este servicio para buscar usuarios en la BD"
         authProvider.setUserDetailsService(userDetailsService);
-        
-        // Le decimos: "Usa este encriptador para verificar las contraseñas"
         authProvider.setPasswordEncoder(passwordEncoder()); 
-        
         return authProvider;
     }
 
     /**
-     * ENCRIPTADOR DE CONTRASEÑAS
-     * IMPORTANTE: Para este ejercicio académico usamos NoOp (sin encriptar).
-     * En un entorno real, aquí usaríamos 'new BCryptPasswordEncoder()'.
+     * ENCRIPTADOR (PasswordEncoder)
+     * * IMPORTANTE ACADÉMICO: Usamos NoOp (texto plano) para facilitar pruebas.
+     * * EN PRODUCCIÓN: Se debe usar BCryptPasswordEncoder.
      */
     @Bean
     public PasswordEncoder passwordEncoder() {
@@ -168,8 +159,8 @@ public class SecurityConfig {
     }
 
     /**
-     * MANEJADOR DE AUTENTICACIÓN
-     * Es la herramienta que usas en el 'UsuarioController' para procesar el login.
+     * MANAGER DE AUTENTICACIÓN
+     * Bean necesario para inyectarlo en el AuthController (Login).
      */
     @Bean
     public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {

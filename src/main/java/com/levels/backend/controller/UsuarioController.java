@@ -17,87 +17,117 @@ import com.levels.backend.model.Usuario;
 import com.levels.backend.security.JwtService;
 import com.levels.backend.service.UsuarioService;
 
+/**
+ * CONTROLADOR: USUARIOS (Autenticación y Perfil)
+ * ----------------------------------------------------
+ * Gestiona el registro de nuevos jugadores, el inicio de sesión (Login)
+ * y la actualización de datos personales.
+ * * Clave de Seguridad: Aquí es donde se genera el Token JWT que el Frontend
+ * debe guardar para hacer futuras peticiones.
+ */
 @RestController
 @RequestMapping("/api/usuarios")
-@CrossOrigin(origins = "*") // Importante: Permite que React entre sin problemas
+@CrossOrigin(origins = "*") // Habilitar CORS para React
 public class UsuarioController {
 
     @Autowired
     private UsuarioService usuarioService;
+    
+    // Servicio de utilidad para crear/firmar Tokens JWT
     @Autowired
-    private JwtService jwtService; // <---  servicio de JWT
+    private JwtService jwtService; 
 
-    // --- ENDPOINT DE REGISTRO ---
-    // URL: POST x
+    /**
+     * 1. REGISTRO DE USUARIO
+     * Método: POST /api/usuarios/registro
+     * Body: { "nombre": "...", "email": "...", "password": "...", "fechaNacimiento": "YYYY-MM-DD", "codigoReferido": "OPT" }
+     */
     @PostMapping("/registro")
     public ResponseEntity<?> registrar(@RequestBody Map<String, Object> payload) {
         try {
-            // 1. Extraemos los datos del JSON que envía el frontend
+            // A. Construcción del objeto Usuario desde el Mapa JSON
             Usuario usuario = new Usuario();
             usuario.setNombre((String) payload.get("nombre"));
             usuario.setEmail((String) payload.get("email"));
             usuario.setPassword((String) payload.get("password"));
             
-            // Convertimos el String de fecha a LocalDate (formato YYYY-MM-DD)
+            // Conversión de Fecha (String -> LocalDate)
+            // Importante: El formato debe ser ISO (2000-12-31)
             String fechaStr = (String) payload.get("fechaNacimiento");
-            usuario.setFechaNacimiento(LocalDate.parse(fechaStr));
+            if (fechaStr != null && !fechaStr.isEmpty()) {
+                usuario.setFechaNacimiento(LocalDate.parse(fechaStr));
+            }
 
-            // Capturamos el código de referido (si es que viene)
+            // B. Código de Referido (Lógica de negocio: Puntos extra)
             String codigoReferido = (String) payload.get("codigoReferido");
 
-            // 2. Llamamos al servicio para que haga la magia
+            // C. Llamada al Servicio (Validaciones de edad, email único, etc.)
             Usuario nuevoUsuario = usuarioService.registrarUsuario(usuario, codigoReferido);
             
             return ResponseEntity.ok(nuevoUsuario);
 
         } catch (RuntimeException e) {
-            // Si falla (ej: es menor de edad), devolvemos error 400 y el mensaje
+            // Errores de negocio (ej: "Eres menor de edad", "Email ocupado")
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         } catch (Exception e) {
+            // Errores inesperados
             return ResponseEntity.internalServerError().body("Error del servidor: " + e.getMessage());
         }
     }
 
-    // --- ENDPOINT DE LOGIN ---
-    // URL: POST http://localhost:8080/api/usuarios/login
+    /**
+     * 2. LOGIN (Inicio de Sesión)
+     * Método: POST /api/usuarios/login
+     * Body: { "email": "...", "password": "..." }
+     * * * Retorno Crítico: Devuelve el TOKEN JWT + Datos del usuario.
+     */
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody Map<String, String> credenciales) {
         try {
             String email = credenciales.get("email");
             String password = credenciales.get("password");
             
-            // 1. Validamos credenciales (Lanza error si falla)
+            // A. Validar credenciales contra la BD
+            // Si la contraseña no coincide, el servicio lanza RuntimeException.
             Usuario usuario = usuarioService.login(email, password);
             
-            // 2. Generamos el Token JWT
+            // B. Generar el Token JWT (La "Llave Maestra")
+            // Usamos el email como identificador principal (Subject).
             String token = jwtService.generateToken(usuario.getEmail());
 
-            // 3. Devolvemos TODO: Datos del usuario + Token
-            // Creamos una respuesta personalizada (Map)
+            // C. Construir la respuesta completa para el Frontend
+            // React necesita el token para guardarlo en localStorage y los datos para mostrar el perfil.
             Map<String, Object> respuesta = Map.of(
-                "token", token,          // <--- ¡AQUÍ VA EL TOKEN!
+                "token", token,          // <--- VITAL
                 "id", usuario.getId(),
                 "nombre", usuario.getNombre(),
                 "email", usuario.getEmail(),
-                "rol", usuario.getRol(),
-                "esEstudianteDuoc", usuario.isEsEstudianteDuoc(),
-                "puntosLevelUp", usuario.getPuntosLevelUp(),
+                "rol", usuario.getRol(), // ADMIN, VENDEDOR, CLIENTE
+                "esEstudianteDuoc", usuario.isEsEstudianteDuoc(), // Para descuentos
+                "puntosLevelUp", usuario.getPuntosLevelUp(),      // Gamificación
                 "nivel", usuario.getNivel(),
-                "fechaNacimiento", usuario.getFechaNacimiento()
+                "fechaNacimiento", usuario.getFechaNacimiento() != null ? usuario.getFechaNacimiento() : ""
             );
 
             return ResponseEntity.ok(respuesta);
 
         } catch (RuntimeException e) {
+            // Error 401 Unauthorized: Credenciales inválidas
             return ResponseEntity.status(401).body(Map.of("error", "Credenciales incorrectas"));
         }
     }
 
-    // NUEVO ENDPOINT: Actualizar Perfil
-    // URL: PUT http://localhost:8080/api/usuarios/{id}
+    /**
+     * 3. ACTUALIZAR PERFIL
+     * Método: PUT /api/usuarios/{id}
+     * Body: Objeto Usuario con los campos nuevos (nombre, password, etc.)
+     * Uso: Pantalla "Mi Perfil".
+     */
     @PutMapping("/{id}")
     public ResponseEntity<?> actualizar(@PathVariable Long id, @RequestBody Usuario usuario) {
         try {
+            // El servicio se encarga de verificar que el usuario exista y actualizar solo lo necesario.
+            // (Ej: Si password viene vacío, no la cambia).
             Usuario usuarioActualizado = usuarioService.actualizarPerfil(id, usuario);
             return ResponseEntity.ok(usuarioActualizado);
         } catch (RuntimeException e) {
