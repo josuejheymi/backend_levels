@@ -10,6 +10,12 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.OneToMany;
 
+/**
+ * ENTIDAD: CATEGORÍA
+ * ----------------------------------------------------
+ * Representa la agrupación lógica de productos (ej: "Consolas", "PC Gamer").
+ * Es una entidad "Padre" en la relación con Productos.
+ */
 @Entity
 public class Categoria {
 
@@ -17,22 +23,33 @@ public class Categoria {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    // Nombre de la categoría (Ej: "Consolas", "Accesorios")
+    // Nombre visible en el menú del Frontend (Navbar y Filtros)
     private String nombre;
 
-    // Nuevo campo para guardar la URL de la imagen de la categoría
+    // URL de la imagen que se muestra en las tarjetas de la página Home
     private String imagenUrl; 
     
-    // Relación Inversa: Una Categoría puede tener muchos Productos
-    // Usamos JsonIgnore para evitar recursión infinita al serializar a JSON
+    /**
+     * RELACIÓN 1 a N (Bidireccional)
+     * Una Categoría tiene MUCHOS Productos.
+     * * 1. mappedBy = "categoria": Indica que la dueña de la relación (quien tiene la Foreign Key)
+     * es la clase 'Producto'. Aquí solo estamos definiendo la vista inversa.
+     * * 2. @JsonIgnore: ¡CRÍTICO!
+     * Al convertir esto a JSON, Jackson intenta leer la categoría, luego sus productos,
+     * luego la categoría de esos productos, y así infinitamente.
+     * @JsonIgnore corta el ciclo aquí: "Cuando pidas una categoría, NO me traigas la lista gigante de productos".
+     */
     @JsonIgnore
     @OneToMany(mappedBy = "categoria")
     private List<Producto> productos;
 
-    // Constructor vacío (necesario para JPA)
+    // --- CONSTRUCTORES ---
+    
+    // Constructor vacío (Requerido obligatoriamente por JPA/Hibernate)
     public Categoria() {}
 
-    // Getters y Setters
+    // --- GETTERS Y SETTERS ---
+    
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
 
