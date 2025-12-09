@@ -31,6 +31,9 @@ Este proyecto es una API robusta que implementa seguridad y reglas de negocio co
 * **JDK 17** o superior.
 * **Maven** (para construir el proyecto).
 * **MySQL Server** instalado y corriendo.
+* 
+Endpoints y Documentación
+Swagger UI: http://localhost:8080/swagger-ui/index.html
 
 ### 1. Configuración de la Base de Datos
 
